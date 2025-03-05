@@ -1,6 +1,6 @@
 {
-	"id": "time-stamper",
-	"name": "Time Stamper",
+	"id": "time-bullet",
+	"name": "Time Bullet",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Quickly add timestamp bullet points to your notes",

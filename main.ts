@@ -1,8 +1,8 @@
 import { Plugin, MarkdownView, Editor } from 'obsidian';
 
-export default class TimeStamperPlugin extends Plugin {
+export default class TimeBulletPlugin extends Plugin {
   async onload() {
-    console.log('Time Stamper plugin loaded');
+    console.log('Time Bullet plugin loaded');
 
     // Register the Enter and Space key handler
     this.registerDomEvent(document, 'keydown', (event: KeyboardEvent) => {
