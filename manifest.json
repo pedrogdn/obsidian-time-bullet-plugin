@@ -1,0 +1,10 @@
+{
+	"id": "time-stamper",
+	"name": "Time Stamper",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Quickly add timestamp bullet points to your notes",
+	"author": "pedrogdn",
+	"authorUrl": "https://github.com/pedrogdn",
+	"isDesktopOnly": true
+}
