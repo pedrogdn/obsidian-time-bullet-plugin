@@ -5,7 +5,8 @@
 ## Features
 
 - **Auto-timestamp task lists**: Converts `-[t]` to `- [HH:MM]` with current time when you press Space
-- **Timestamp continuity**: When pressing Enter on a timestamped list item, the new line automatically includes the current time
+- **Timestamp continuity**: When pressing Enter on a timestamped list item, the new line automatically includes the
+  current time
 - **Minimal interference**: Works naturally within your existing workflow
 - **No configuration needed**: Simple, intuitive functionality right out of the box
 
@@ -13,14 +14,14 @@
 
 ### Creating a timestamped list
 
-1. Type `-[t]` 
+1. Type `-[t]`
 2. Press the Space key
-3. The text becomes `- [HH:MM]` with the current time
+3. The text becomes `- [{{time_stamp}}]` with the current time formatted based on your settings (default is HH:MM).
 4. Continue writing your note
 
 ### Continuing a timestamped list
 
-1. Press Enter at the end of a line that starts with `- [HH:MM]`
+1. Press Enter at the end of a line that starts with `- [{{time_stamp}}]`
 2. A new list item with the current time is automatically created
 3. Continue with your notes
 
@@ -30,6 +31,11 @@
 - **Daily logs**: Document when you completed different tasks
 - **Research notes**: Record the time of observations or findings
 - **Time tracking**: Keep a simple record of activities throughout your day
+
+## Settings
+
+- **Time format**: (default is HH:MM) - Customize your time format using Dayjs formatting found on the [dayjs documentation](https://day.js.org/docs/en/display/format)
+- **Use UTC**: (default is true) - Use UTC time when creating a timestamp. If false, time will be local to your machine.
 
 ## Installation
 
@@ -43,7 +49,8 @@
 
 ### Manual Installation
 
-1. Download the latest release from the [releases page](https://github.com/pedrogdn/obsidian-time-bullet-plugin/releases)
+1. Download the latest release from
+   the [releases page](https://github.com/pedrogdn/obsidian-time-bullet-plugin/releases)
 2. Extract the zip file to your Obsidian plugins folder: `{vault}/.obsidian/plugins/`
 3. Reload Obsidian
 4. Enable the plugin in Settings → Community plugins
