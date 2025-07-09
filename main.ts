@@ -99,7 +99,6 @@ export default class TimeBulletPlugin extends Plugin {
     const timeStampMatches = line.match(/^- \[(.*)\]/);
     if (!timeStampMatches || !Array.isArray(timeStampMatches)) return false;
 
-    console.log(timeStampMatches);
     return dayjs(timeStampMatches[1], this.settings.timeStampFormat, true).isValid();
   }
 
