@@ -9,7 +9,7 @@ interface TimeBulletPluginSettings {
   isUTC: boolean;
 }
 
-const DEFAULT_SETTINGS: Partial<TimeBulletPluginSettings> = {
+export const DEFAULT_SETTINGS: TimeBulletPluginSettings = {
   timeStampFormat: 'HH:mm',
   isUTC: true,
 };
@@ -21,6 +21,15 @@ dayjs.extend(customParseFormat); // Required for validating against a format str
 export default class TimeBulletPlugin extends Plugin {
   public settings: TimeBulletPluginSettings;
   private readonly timeBulletPattern = '-[t]';
+
+  private get timeStampFormat() {
+    // Use `||` to handle the case of an empty string.
+    return this.settings.timeStampFormat || DEFAULT_SETTINGS.timeStampFormat;
+  }
+
+  private get isUTC() {
+    return this.settings.isUTC;
+  }
 
   async onload() {
     console.log('Time Bullet plugin loaded');
@@ -99,14 +108,14 @@ export default class TimeBulletPlugin extends Plugin {
     const timeStampMatches = line.match(/^- \[(.*)\]/);
     if (!timeStampMatches || !Array.isArray(timeStampMatches)) return false;
 
-    return dayjs(timeStampMatches[1], this.settings.timeStampFormat, true).isValid();
+    return dayjs(timeStampMatches[1], this.timeStampFormat, true).isValid();
   }
 
   private generateTimestamp(): string {
-    if (this.settings.isUTC) {
-      return dayjs.utc().format(this.settings.timeStampFormat);
+    if (this.isUTC) {
+      return dayjs.utc().format(this.timeStampFormat);
     } else {
-      return dayjs().format(this.settings.timeStampFormat);
+      return dayjs().format(this.timeStampFormat);
     }
   }
 
