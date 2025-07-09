@@ -21,6 +21,7 @@ dayjs.extend(customParseFormat); // Required for validating against a format str
 export default class TimeBulletPlugin extends Plugin {
   public settings: TimeBulletPluginSettings;
   private readonly timeBulletPattern = '-[t]';
+  private readonly invalidFormatFallbackText = 'invalid_format';
 
   private get timeStampFormat() {
     // Use `||` to handle the case of an empty string.
@@ -112,10 +113,15 @@ export default class TimeBulletPlugin extends Plugin {
   }
 
   private generateTimestamp(): string {
-    if (this.isUTC) {
-      return dayjs.utc().format(this.timeStampFormat);
-    } else {
-      return dayjs().format(this.timeStampFormat);
+    try {
+      if (this.isUTC) {
+        return dayjs.utc().format(this.timeStampFormat);
+      } else {
+        return dayjs().format(this.timeStampFormat);
+      }
+    } catch (_) {
+      // If for some reason the format used results in an error, we will expose that error to the user by showing `invalid_format`.
+      return this.invalidFormatFallbackText;
     }
   }
 
