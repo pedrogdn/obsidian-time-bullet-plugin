@@ -62,6 +62,7 @@ Contributions are welcome! If you'd like to contribute:
 1. Fork the repository
 2. Create a feature branch
 3. Submit a pull request
+4. Contribution test
 
 ## License
 
