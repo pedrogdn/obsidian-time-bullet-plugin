@@ -5,13 +5,13 @@ import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { TimeBulletSettingTab } from './time-bullet-setting-tab';
 
 interface TimeBulletPluginSettings {
-  timeStampFormat: string;
-  isUTC: boolean;
+	timeStampFormat: string;
+	isUTC: boolean;
 }
 
 export const DEFAULT_SETTINGS: TimeBulletPluginSettings = {
-  timeStampFormat: 'HH:mm',
-  isUTC: true,
+	timeStampFormat: 'HH:mm',
+	isUTC: true,
 };
 
 // Define plugins for dayjs.
@@ -19,117 +19,127 @@ dayjs.extend(utc); // Required for UTC time.
 dayjs.extend(customParseFormat); // Required for validating against a format string.
 
 export default class TimeBulletPlugin extends Plugin {
-  public settings: TimeBulletPluginSettings;
-  private readonly timeBulletPattern = '-[t]';
-  private readonly invalidFormatFallbackText = 'invalid_format';
+	public settings: TimeBulletPluginSettings;
+	private readonly timeBulletPattern = '-[t]';
+	private readonly invalidFormatFallbackText = 'invalid_format';
 
-  private get timeStampFormat() {
-    // Use `||` to handle the case of an empty string.
-    return this.settings.timeStampFormat || DEFAULT_SETTINGS.timeStampFormat;
-  }
+	private get timeStampFormat() {
+		// Use `||` to handle the case of an empty string.
+		return this.settings.timeStampFormat || DEFAULT_SETTINGS.timeStampFormat;
+	}
 
-  private get isUTC() {
-    return this.settings.isUTC;
-  }
+	private get isUTC() {
+		return this.settings.isUTC;
+	}
 
-  async onload() {
-    console.log('Time Bullet plugin loaded');
+	async onload() {
+		console.log('Time Bullet plugin loaded');
 
-    await this.loadSettings();
-    this.addSettingTab(new TimeBulletSettingTab(this.app, this));
+		await this.loadSettings();
+		this.addSettingTab(new TimeBulletSettingTab(this.app, this));
 
-    // Register the Enter and Space key handler
-    this.registerDomEvent(document, 'keydown', (event: KeyboardEvent) => {
-      if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
-        // Get the active editor
-        const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeLeaf) {
-          const editor = activeLeaf.editor;
-          this.handleEnterInEditor(editor, event);
-        }
-      }
+		// Register the Enter and Space key handler
+		this.registerDomEvent(document, 'keydown', (event: KeyboardEvent) => {
+			if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
+				// Get the active editor
+				const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (activeLeaf) {
+					const editor = activeLeaf.editor;
+					this.handleEnterInEditor(editor, event);
+				}
+			}
 
-      if (event.key === ' ') {
-        const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-        if (activeLeaf) {
-          const editor = activeLeaf.editor;
-          this.handleSpaceInEditor(editor, event);
-        }
-      }
-    });
-  }
+			if (event.key === ' ') {
+				const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (activeLeaf) {
+					const editor = activeLeaf.editor;
+					this.handleSpaceInEditor(editor, event);
+				}
+			}
+		});
+	}
 
-  private handleSpaceInEditor(editor: Editor, event: KeyboardEvent) {
-    const cursor = editor.getCursor();
-    const currentLine = cursor.line;
-    const currentLineContent = editor.getLine(currentLine);
+	private handleSpaceInEditor(editor: Editor, event: KeyboardEvent) {
+		const cursor = editor.getCursor();
+		const currentLine = cursor.line;
+		const currentLineContent = editor.getLine(currentLine);
 
-    if (currentLineContent.startsWith(this.timeBulletPattern)) {
-      const timeStampPrefix = `- [${this.generateTimestamp()}] `;
-      const updatedLineContent = `${timeStampPrefix}${currentLineContent.slice(this.timeBulletPattern.length)}`;
-      editor.setLine(currentLine, updatedLineContent);
+		if (currentLineContent.startsWith(this.timeBulletPattern)) {
+			const timeStampPrefix = `- [${this.generateTimestamp()}] `;
+			const updatedLineContent = `${timeStampPrefix}${currentLineContent.slice(this.timeBulletPattern.length)}`;
+			editor.setLine(currentLine, updatedLineContent);
 
-      editor.setCursor({
-        line: currentLine,
-        ch: timeStampPrefix.length,
-      });
+			editor.setCursor({
+				line: currentLine,
+				ch: timeStampPrefix.length,
+			});
 
-      event.preventDefault();
-    }
-  }
+			event.preventDefault();
+		}
+	}
 
-  private handleEnterInEditor(editor: Editor, event: KeyboardEvent) {
-    const cursor = editor.getCursor();
-    const currentLine = cursor.line;
+	private handleEnterInEditor(editor: Editor, event: KeyboardEvent) {
+		const cursor = editor.getCursor();
+		const currentLine = cursor.line;
+		const currentCursorCh = cursor.ch;
 
-    // Only proceed if we're not at the very first line
-    if (currentLine > 0) {
-      const previousLine = editor.getLine(currentLine - 1);
+		// Only proceed if we're not at the very first line
+		if (currentLine > 0) {
+			const previousLine = editor.getLine(currentLine - 1);
 
-      if (this.doesLineStartWithTimeBullet(previousLine)) {
-        const currentLineContent = editor.getLine(currentLine);
+			if (this.doesLineStartWithTimeBullet(previousLine)) {
+				const currentLineContent = editor.getLine(currentLine);
 
-        const timeStampPrefix = `- [${this.generateTimestamp()}] `;
-        const updatedLineContent = `${timeStampPrefix}${currentLineContent.slice(2)}`;
-        editor.setLine(currentLine, updatedLineContent);
+				/**
+				 * We don't want to strip the whitespace or otherwise change anything about the content in this new line.
+				 * To achieve this, we will replace the bullet with a timestamped bullet. This preserves whitespace.
+				 */
+				const bulletToReplace = '-';
+				const timeStampedBullet = `- [${this.generateTimestamp()}]`;
+				const updatedLineContent = currentLineContent.replace(bulletToReplace, timeStampedBullet);
 
-        // Position cursor after the timestamp
-        editor.setCursor({
-          line: currentLine,
-          ch: timeStampPrefix.length,
-        });
+				editor.setLine(currentLine, updatedLineContent);
 
-        // Prevent default Enter behavior to avoid creating an additional empty line
-        event.preventDefault();
-      }
-    }
-  }
+				// Remove the thing we replaced, add the thing we added.
+				const updatedCursorCh = currentCursorCh + timeStampedBullet.length - bulletToReplace.length;
 
-  private doesLineStartWithTimeBullet(line: string) {
-    const timeStampMatches = line.match(/^- \[(.*)\]/);
-    if (!timeStampMatches || !Array.isArray(timeStampMatches)) return false;
+				// Position cursor after the timestamp
+				editor.setCursor({
+					line: currentLine,
+					ch: updatedCursorCh,
+				});
 
-    return dayjs(timeStampMatches[1], this.timeStampFormat, true).isValid();
-  }
+				// Prevent default Enter behavior to avoid creating an additional empty line
+				event.preventDefault();
+			}
+		}
+	}
 
-  private generateTimestamp(): string {
-    try {
-      if (this.isUTC) {
-        return dayjs.utc().format(this.timeStampFormat);
-      } else {
-        return dayjs().format(this.timeStampFormat);
-      }
-    } catch (_) {
-      // If for some reason the format used results in an error, we will expose that error to the user by showing `invalid_format`.
-      return this.invalidFormatFallbackText;
-    }
-  }
+	private doesLineStartWithTimeBullet(line: string) {
+		const timeStampMatches = line.trim().match(/^- \[(.*)\]/);
+		if (!timeStampMatches || !Array.isArray(timeStampMatches)) return false;
 
-  async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-  }
+		return dayjs(timeStampMatches[1], this.timeStampFormat, true).isValid();
+	}
 
-  async saveSettings() {
-    await this.saveData(this.settings);
-  }
+	private generateTimestamp(): string {
+		try {
+			if (this.isUTC) {
+				return dayjs.utc().format(this.timeStampFormat);
+			} else {
+				return dayjs().format(this.timeStampFormat);
+			}
+		} catch (_) {
+			// If for some reason the format used results in an error, we will expose that error to the user by showing `invalid_format`.
+			return this.invalidFormatFallbackText;
+		}
+	}
+
+	async loadSettings() {
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+	}
+
+	async saveSettings() {
+		await this.saveData(this.settings);
+	}
 }
