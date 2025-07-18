@@ -116,10 +116,11 @@ export default class TimeBulletPlugin extends Plugin {
 	}
 
 	private doesLineStartWithTimeBullet(line: string) {
-		const timeStampMatches = line.trim().match(/^- \[(.*)\]/);
-		if (!timeStampMatches || !Array.isArray(timeStampMatches)) return false;
+		const timeStampMatches = line.trim().match(/^- \[([^\]]+)\]/); // Capture contents within the first `[..]`
+		if (!timeStampMatches || !Array.isArray(timeStampMatches) || timeStampMatches.length < 2) return false;
 
-		return dayjs(timeStampMatches[1], this.timeStampFormat, true).isValid();
+		const [, capturedTimeStamp] = timeStampMatches;
+		return dayjs(capturedTimeStamp, this.timeStampFormat, true).isValid();
 	}
 
 	private generateTimestamp(): string {
