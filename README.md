@@ -7,6 +7,7 @@
 - **Auto-timestamp task lists**: Converts `-[t]` to `- [HH:MM]` with current time when you press Space
 - **Timestamp continuity**: When pressing Enter on a timestamped list item, the new line automatically includes the
   current time
+- **Toggle timestamps**: Add or remove timestamps from any line with a customizable hotkey
 - **Minimal interference**: Works naturally within your existing workflow
 - **No configuration needed**: Simple, intuitive functionality right out of the box
 
@@ -24,6 +25,15 @@
 1. Press Enter at the end of a line that starts with `- [{{time_stamp}}]`
 2. A new list item with the current time is automatically created
 3. Continue with your notes
+
+### Toggle time bullets
+
+1. Place your cursor on any line
+2. Use the hotkey you've assigned to "Toggle time bullet" (set in Settings → Hotkeys)
+3. The command will:
+   - Add a timestamp to regular bullets: `- ` becomes `- [HH:MM] `
+   - Remove timestamps from time bullets: `- [HH:MM] ` becomes `- `
+   - Add both bullet and timestamp to plain text lines
 
 ## Use Cases
 
