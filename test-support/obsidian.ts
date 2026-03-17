@@ -9,6 +9,8 @@ export class Plugin {
 
 	addSettingTab() {}
 
+	addCommand() {}
+
 	register(cb: () => void) {
 		return cb;
 	}

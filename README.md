@@ -4,7 +4,7 @@
 
 ## Features
 
-- **Auto-timestamp task lists**: Converts `-[t]` to `- [HH:MM]` with current time when you press Space
+- **Auto-timestamp task lists**: Converts `-[t]` to `- [HH:mm]` with current time when you press Space
 - **Timestamp continuity**: When pressing Enter on a timestamped list item, the new line automatically includes the
   current time
 - **Toggle timestamps**: Add or remove timestamps from any line with a customizable hotkey
@@ -17,7 +17,7 @@
 
 1. Type `-[t]`
 2. Press the Space key
-3. The text becomes `- [{{time_stamp}}]` with the current time formatted based on your settings (default is HH:MM).
+3. The text becomes `- [{{time_stamp}}]` with the current time formatted based on your settings (default is HH:mm).
 4. Continue writing your note
 
 ### Continuing a timestamped list
@@ -31,8 +31,8 @@
 1. Place your cursor on any line
 2. Use the hotkey you've assigned to "Toggle time bullet" (set in Settings → Hotkeys)
 3. The command will:
-   - Add a timestamp to regular bullets: `- ` becomes `- [HH:MM] `
-   - Remove timestamps from time bullets: `- [HH:MM] ` becomes `- `
+   - Add a timestamp to regular bullets: `- ` becomes `- [HH:mm] `
+   - Remove timestamps from time bullets: `- [HH:mm] ` becomes `- `
    - Add both bullet and timestamp to plain text lines
 
 ## Use Cases
@@ -44,7 +44,7 @@
 
 ## Settings
 
-- **Time format**: (default is HH:MM) - Customize your time format using Dayjs formatting found on the [dayjs documentation](https://day.js.org/docs/en/display/format)
+- **Time format**: (default is HH:mm) - Customize your time format using Dayjs formatting found on the [dayjs documentation](https://day.js.org/docs/en/display/format)
 - **Use UTC**: (default is true) - Use UTC time when creating a timestamp. If false, time will be local to your machine.
 
 ## Installation

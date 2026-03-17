@@ -9,6 +9,17 @@ interface TimeBulletPluginSettings {
 	isUTC: boolean;
 }
 
+type BulletMarker = '-' | '*' | '+';
+
+type BulletMatch = {
+	marker: BulletMarker;
+	restOfLine: string;
+};
+
+type TimeBulletMatch = BulletMatch & {
+	timestamp: string;
+};
+
 export const DEFAULT_SETTINGS: TimeBulletPluginSettings = {
 	timeStampFormat: 'HH:mm',
 	isUTC: true,
@@ -22,11 +33,10 @@ export default class TimeBulletPlugin extends Plugin {
 	public settings: TimeBulletPluginSettings;
 	private readonly timeBulletPattern = '-[t]';
 	private readonly invalidFormatFallbackText = 'invalid_format';
+	private readonly timeBulletLinePattern = /^([-*+]) \[([^\]]+)\](.*)$/;
+	private readonly indentationPattern = /^(\s*)/;
+	private readonly bulletLinePattern = /^([-*+])(.*)$/;
 	private readonly registeredDocuments = new WeakSet<Document>();
-	// Regex patterns for toggle functionality
-	private readonly TIME_BULLET_REGEX = /^- \[([^\]]+)\](.*)$/;
-	private readonly INDENT_REGEX = /^(\s*)/;
-	private readonly BULLET_REGEX = /^[-*+](.*)$/;
 
 	private get timeStampFormat() {
 		// Use `||` to handle the case of an empty string.
@@ -146,21 +156,34 @@ export default class TimeBulletPlugin extends Plugin {
 
 			if (this.doesLineStartWithTimeBullet(previousLine)) {
 				const currentLineContent = editor.getLine(currentLine);
+				const indentation = this.getIndentation(currentLineContent);
+				const currentBullet = this.getBulletMatch(currentLineContent);
 
-				/**
-				 * We don't want to strip the whitespace or otherwise change anything about the content in this new line.
-				 * To achieve this, we will replace the bullet with a timestamped bullet. This preserves whitespace.
-				 */
-				const bulletToReplace = '-';
-				const timeStampedBullet = `- [${this.generateTimestamp()}]`;
-				const updatedLineContent = currentLineContent.replace(bulletToReplace, timeStampedBullet);
+				if (!currentBullet) {
+					return;
+				}
+
+				const currentLineWithoutIndentation = currentLineContent.slice(indentation.length);
+				const currentTimestamp = this.generateTimestamp();
+				const trimmedRestOfLine = currentBullet.restOfLine.trimStart();
+				const oldPrefixLength = currentLineWithoutIndentation.length - trimmedRestOfLine.length;
+				const newPrefixLength = `${currentBullet.marker} [${currentTimestamp}] `.length;
+				const updatedLineContent = this.buildTimeBulletLine(
+					indentation,
+					currentBullet.marker,
+					currentTimestamp,
+					currentBullet.restOfLine,
+				);
 
 				editor.setLine(currentLine, updatedLineContent);
 
-				// Remove the thing we replaced, add the thing we added.
-				const updatedCursorCh = currentCursorCh + timeStampedBullet.length - bulletToReplace.length;
-
-				// Position cursor after the timestamp
+				const updatedCursorCh = this.calculateUpdatedCursorPosition(
+					currentCursorCh,
+					indentation.length,
+					oldPrefixLength,
+					newPrefixLength,
+					updatedLineContent.length,
+				);
 				editor.setCursor({
 					line: currentLine,
 					ch: updatedCursorCh,
@@ -173,11 +196,7 @@ export default class TimeBulletPlugin extends Plugin {
 	}
 
 	private doesLineStartWithTimeBullet(line: string) {
-		const timeStampMatches = line.trim().match(/^- \[([^\]]+)\]/); // Capture contents within the first `[..]`
-		if (!timeStampMatches || !Array.isArray(timeStampMatches) || timeStampMatches.length < 2) return false;
-
-		const [, capturedTimeStamp] = timeStampMatches;
-		return dayjs(capturedTimeStamp, this.timeStampFormat, true).isValid();
+		return this.getValidTimeBulletMatch(line) !== null;
 	}
 
 	private generateTimestamp(): string {
@@ -192,15 +211,71 @@ export default class TimeBulletPlugin extends Plugin {
 			return this.invalidFormatFallbackText;
 		}
 	}
-	
+
 	private getIndentation(line: string): string {
-		const match = line.match(this.INDENT_REGEX);
+		const match = line.match(this.indentationPattern);
 		return match ? match[1] : '';
 	}
-	
-	private calculateCursorOffset(oldLength: number, newLength: number, currentPosition: number): number {
-		const lengthDiff = newLength - oldLength;
-		return Math.max(0, currentPosition + lengthDiff);
+
+	private getBulletMatch(line: string): BulletMatch | null {
+		const match = line.trimStart().match(this.bulletLinePattern);
+		if (!match) {
+			return null;
+		}
+
+		const [, marker, restOfLine] = match;
+		return {
+			marker: marker as BulletMarker,
+			restOfLine,
+		};
+	}
+
+	private getValidTimeBulletMatch(line: string): TimeBulletMatch | null {
+		const match = line.trimStart().match(this.timeBulletLinePattern);
+		if (!match) {
+			return null;
+		}
+
+		const [, marker, timestamp, restOfLine] = match;
+		if (!dayjs(timestamp, this.timeStampFormat, true).isValid()) {
+			return null;
+		}
+
+		return {
+			marker: marker as BulletMarker,
+			timestamp,
+			restOfLine,
+		};
+	}
+
+	private buildBulletLine(indent: string, marker: BulletMarker, text: string): string {
+		const trimmedText = text.trimStart();
+		return trimmedText ? `${indent}${marker} ${trimmedText}` : `${indent}${marker} `;
+	}
+
+	private buildTimeBulletLine(indent: string, marker: BulletMarker, timestamp: string, text: string): string {
+		const trimmedText = text.trimStart();
+		return trimmedText ? `${indent}${marker} [${timestamp}] ${trimmedText}` : `${indent}${marker} [${timestamp}] `;
+	}
+
+	private calculateUpdatedCursorPosition(
+		currentPosition: number,
+		prefixStart: number,
+		oldPrefixLength: number,
+		newPrefixLength: number,
+		newLineLength: number,
+	): number {
+		if (currentPosition < prefixStart) {
+			return currentPosition;
+		}
+
+		const oldPrefixEnd = prefixStart + oldPrefixLength;
+		if (currentPosition <= oldPrefixEnd) {
+			return Math.min(prefixStart + newPrefixLength, newLineLength);
+		}
+
+		const updatedPosition = currentPosition + newPrefixLength - oldPrefixLength;
+		return Math.max(0, Math.min(updatedPosition, newLineLength));
 	}
 
 	private toggleTimeBullet(editor: Editor) {
@@ -208,92 +283,74 @@ export default class TimeBulletPlugin extends Plugin {
 		const currentLine = cursor.line;
 		const originalCursorCh = cursor.ch;
 		const currentLineContent = editor.getLine(currentLine);
-		const trimmedContent = currentLineContent.trim();
-		
-		// Check if line already has a time bullet
-		const timeBulletMatch = trimmedContent.match(this.TIME_BULLET_REGEX);
-		
+		const indentation = this.getIndentation(currentLineContent);
+		const currentLineWithoutIndentation = currentLineContent.slice(indentation.length);
+		const timeBulletMatch = this.getValidTimeBulletMatch(currentLineContent);
+
 		if (timeBulletMatch) {
-			// Has time bullet - check if it's a valid timestamp
-			const [fullMatch, capturedTimeStamp, restOfLine] = timeBulletMatch;
-			const isValidTimestamp = dayjs(capturedTimeStamp, this.timeStampFormat, true).isValid();
-			
-			if (isValidTimestamp) {
-				// Remove time bullet, keep as normal bullet
-				const indent = this.getIndentation(currentLineContent);
-				// Trim all leading spaces from restOfLine
-				const trimmedRestOfLine = restOfLine.trimStart();
-				const newContent = `${indent}- ${trimmedRestOfLine}`;
-				
-				editor.setLine(currentLine, newContent);
-				
-				// Preserve cursor position, adjusting for the removed timestamp
-				const newCursorCh = this.calculateCursorOffset(
-					currentLineContent.length,
-					newContent.length,
-					originalCursorCh
-				);
-				editor.setCursor({
-					line: currentLine,
-					ch: newCursorCh
-				});
-				return;
-			}
+			const trimmedRestOfLine = timeBulletMatch.restOfLine.trimStart();
+			const oldPrefixLength = currentLineWithoutIndentation.length - trimmedRestOfLine.length;
+			const newPrefixLength = `${timeBulletMatch.marker} `.length;
+			const updatedLineContent = this.buildBulletLine(
+				indentation,
+				timeBulletMatch.marker,
+				timeBulletMatch.restOfLine,
+			);
+
+			editor.setLine(currentLine, updatedLineContent);
+			editor.setCursor({
+				line: currentLine,
+				ch: this.calculateUpdatedCursorPosition(
+					originalCursorCh,
+					indentation.length,
+					oldPrefixLength,
+					newPrefixLength,
+					updatedLineContent.length,
+				),
+			});
+			return;
 		}
-		
-		// No time bullet or invalid timestamp - add time bullet
+
 		const timestamp = this.generateTimestamp();
-		const indent = this.getIndentation(currentLineContent);
-		
-		// Check if line starts with a normal bullet (after indentation)
-		const normalBulletMatch = trimmedContent.match(this.BULLET_REGEX);
-		
-		if (normalBulletMatch) {
-			// Replace normal bullet with time bullet
-			const [, restOfLine] = normalBulletMatch;
-			// Trim leading spaces from restOfLine and add exactly one space
-			const trimmedRestOfLine = restOfLine.trimStart();
-			const newContent = `${indent}- [${timestamp}] ${trimmedRestOfLine}`;
-			
-			editor.setLine(currentLine, newContent);
-			
-			// Preserve cursor position, adjusting for the added timestamp
-			const newCursorCh = this.calculateCursorOffset(
-				currentLineContent.length,
-				newContent.length,
-				originalCursorCh
+		const bulletMatch = this.getBulletMatch(currentLineContent);
+		if (bulletMatch) {
+			const trimmedRestOfLine = bulletMatch.restOfLine.trimStart();
+			const oldPrefixLength = currentLineWithoutIndentation.length - trimmedRestOfLine.length;
+			const newPrefixLength = `${bulletMatch.marker} [${timestamp}] `.length;
+			const updatedLineContent = this.buildTimeBulletLine(
+				indentation,
+				bulletMatch.marker,
+				timestamp,
+				bulletMatch.restOfLine,
 			);
+
+			editor.setLine(currentLine, updatedLineContent);
 			editor.setCursor({
 				line: currentLine,
-				ch: newCursorCh
+				ch: this.calculateUpdatedCursorPosition(
+					originalCursorCh,
+					indentation.length,
+					oldPrefixLength,
+					newPrefixLength,
+					updatedLineContent.length,
+				),
 			});
-		} else if (trimmedContent === '') {
-			// Empty line - add time bullet
-			const newContent = `${indent}- [${timestamp}] `;
-			editor.setLine(currentLine, newContent);
-			
-			// Keep cursor at end of new content
-			editor.setCursor({
-				line: currentLine,
-				ch: newContent.length
-			});
-		} else {
-			// Line has content but no bullet - add time bullet at beginning
-			const newContent = `${indent}- [${timestamp}] ${trimmedContent}`;
-			
-			editor.setLine(currentLine, newContent);
-			
-			// Preserve cursor position, adjusting for the added timestamp and bullet
-			const newCursorCh = this.calculateCursorOffset(
-				currentLineContent.length,
-				newContent.length,
-				originalCursorCh
-			);
-			editor.setCursor({
-				line: currentLine,
-				ch: newCursorCh
-			});
+			return;
 		}
+
+		const updatedLineContent = this.buildTimeBulletLine(indentation, '-', timestamp, currentLineWithoutIndentation);
+		const newPrefixLength = `- [${timestamp}] `.length;
+		editor.setLine(currentLine, updatedLineContent);
+		editor.setCursor({
+			line: currentLine,
+			ch: this.calculateUpdatedCursorPosition(
+				originalCursorCh,
+				indentation.length,
+				0,
+				newPrefixLength,
+				updatedLineContent.length,
+			),
+		});
 	}
 
 	async loadSettings() {
