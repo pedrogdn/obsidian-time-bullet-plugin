@@ -1,4 +1,4 @@
-import TimeBulletPlugin from './main';
+import type TimeBulletPlugin from './main';
 import { App, PluginSettingTab, Setting } from 'obsidian';
 
 export class TimeBulletSettingTab extends PluginSettingTab {
