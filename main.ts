@@ -22,6 +22,7 @@ export default class TimeBulletPlugin extends Plugin {
 	public settings: TimeBulletPluginSettings;
 	private readonly timeBulletPattern = '-[t]';
 	private readonly invalidFormatFallbackText = 'invalid_format';
+	private readonly registeredDocuments = new WeakSet<Document>();
 
 	private get timeStampFormat() {
 		// Use `||` to handle the case of an empty string.
@@ -38,25 +39,68 @@ export default class TimeBulletPlugin extends Plugin {
 		await this.loadSettings();
 		this.addSettingTab(new TimeBulletSettingTab(this.app, this));
 
-		// Register the Enter and Space key handler
-		this.registerDomEvent(document, 'keydown', (event: KeyboardEvent) => {
-			if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
-				// Get the active editor
-				const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (activeLeaf) {
-					const editor = activeLeaf.editor;
-					this.handleEnterInEditor(editor, event);
-				}
+		this.registerWorkspaceKeyHandlers();
+	}
+
+	private registerWorkspaceKeyHandlers() {
+		this.registerDocumentKeyHandler(document);
+
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			this.registerDocumentKeyHandler(leaf.getContainer().doc);
+		});
+
+		this.registerEvent(
+			this.app.workspace.on('window-open', (workspaceWindow) => {
+				this.registerDocumentKeyHandler(workspaceWindow.doc);
+			}),
+		);
+	}
+
+	private registerDocumentKeyHandler(doc: Document) {
+		if (this.registeredDocuments.has(doc)) {
+			return;
+		}
+
+		this.registeredDocuments.add(doc);
+		this.registerDomEvent(doc, 'keydown', (event: KeyboardEvent) => {
+			this.handleKeydown(event, doc);
+		});
+	}
+
+	private handleKeydown(event: KeyboardEvent, doc: Document) {
+		const editor = this.getFocusedMarkdownEditor(doc);
+		if (!editor) {
+			return;
+		}
+
+		if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
+			this.handleEnterInEditor(editor, event);
+		}
+
+		if (event.key === ' ') {
+			this.handleSpaceInEditor(editor, event);
+		}
+	}
+
+	private getFocusedMarkdownEditor(doc: Document): Editor | null {
+		let focusedEditor: Editor | null = null;
+
+		this.app.workspace.iterateAllLeaves((leaf) => {
+			if (focusedEditor || !(leaf.view instanceof MarkdownView)) {
+				return;
 			}
 
-			if (event.key === ' ') {
-				const activeLeaf = this.app.workspace.getActiveViewOfType(MarkdownView);
-				if (activeLeaf) {
-					const editor = activeLeaf.editor;
-					this.handleSpaceInEditor(editor, event);
-				}
+			if (leaf.getContainer().doc !== doc) {
+				return;
+			}
+
+			const editor = leaf.view.editor;
+			if (editor.hasFocus()) {
+				focusedEditor = editor;
 			}
 		});
+
+		return focusedEditor ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.editor ?? null;
 	}
 
 	private handleSpaceInEditor(editor: Editor, event: KeyboardEvent) {
