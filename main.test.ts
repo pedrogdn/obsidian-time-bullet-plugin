@@ -12,6 +12,7 @@ type PluginInternals = {
 	generateTimestamp: () => string;
 	handleSpaceInEditor: (editor: FakeEditor, event: KeyboardEvent) => void;
 	handleEnterInEditor: (editor: FakeEditor, event: KeyboardEvent) => void;
+	toggleTimeBullet: (editor: FakeEditor) => void;
 };
 
 type FakeLeaf = {
@@ -151,6 +152,88 @@ describe('TimeBulletPlugin', () => {
 		expect(editor.cursor).toEqual({
 			line: 1,
 			ch: 2 + '- [09:30]'.length - '-'.length,
+		});
+		expect(event.defaultPrevented).toBe(true);
+	});
+
+	it('adds a time bullet to a regular bullet and keeps the cursor with the content', () => {
+		const { plugin } = createPlugin();
+		const internals = plugin as unknown as PluginInternals;
+		plugin.settings = { ...DEFAULT_SETTINGS };
+
+		vi.spyOn(internals, 'generateTimestamp').mockReturnValue('09:30');
+
+		const editor = new FakeEditor(['- task'], { line: 0, ch: 2 });
+
+		internals.toggleTimeBullet(editor);
+
+		expect(editor.lines[0]).toBe('- [09:30] task');
+		expect(editor.cursor).toEqual({
+			line: 0,
+			ch: '- [09:30] '.length,
+		});
+	});
+
+	it('keeps the cursor in leading indentation when toggling a plain text line', () => {
+		const { plugin } = createPlugin();
+		const internals = plugin as unknown as PluginInternals;
+		plugin.settings = { ...DEFAULT_SETTINGS };
+
+		vi.spyOn(internals, 'generateTimestamp').mockReturnValue('09:30');
+
+		const editor = new FakeEditor(['  task'], { line: 0, ch: 1 });
+
+		internals.toggleTimeBullet(editor);
+
+		expect(editor.lines[0]).toBe('  - [09:30] task');
+		expect(editor.cursor).toEqual({
+			line: 0,
+			ch: 1,
+		});
+	});
+
+	it('preserves non-dash bullet markers when toggling on and off', () => {
+		const { plugin } = createPlugin();
+		const internals = plugin as unknown as PluginInternals;
+		plugin.settings = { ...DEFAULT_SETTINGS };
+
+		vi.spyOn(internals, 'generateTimestamp').mockReturnValue('09:30');
+
+		const editor = new FakeEditor(['* task'], { line: 0, ch: 2 });
+
+		internals.toggleTimeBullet(editor);
+
+		expect(editor.lines[0]).toBe('* [09:30] task');
+		expect(editor.cursor).toEqual({
+			line: 0,
+			ch: '* [09:30] '.length,
+		});
+
+		internals.toggleTimeBullet(editor);
+
+		expect(editor.lines[0]).toBe('* task');
+		expect(editor.cursor).toEqual({
+			line: 0,
+			ch: 2,
+		});
+	});
+
+	it('continues timestamped lists with the current bullet marker', () => {
+		const { plugin } = createPlugin();
+		const internals = plugin as unknown as PluginInternals;
+		plugin.settings = { ...DEFAULT_SETTINGS };
+
+		vi.spyOn(internals, 'generateTimestamp').mockReturnValue('09:30');
+
+		const editor = new FakeEditor(['* [08:00] start', '* next'], { line: 1, ch: 2 });
+		const event = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+
+		internals.handleEnterInEditor(editor, event);
+
+		expect(editor.lines[1]).toBe('* [09:30] next');
+		expect(editor.cursor).toEqual({
+			line: 1,
+			ch: '* [09:30] '.length,
 		});
 		expect(event.defaultPrevented).toBe(true);
 	});
