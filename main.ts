@@ -1,8 +1,9 @@
-import { Editor, MarkdownView, Plugin } from 'obsidian';
+import { Editor, Plugin } from 'obsidian';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import { TimeBulletSettingTab } from './time-bullet-setting-tab';
+import { createTimeBulletFilter } from './time-bullet-core';
 
 interface TimeBulletPluginSettings {
 	timeStampFormat: string;
@@ -31,12 +32,10 @@ dayjs.extend(customParseFormat); // Required for validating against a format str
 
 export default class TimeBulletPlugin extends Plugin {
 	public settings: TimeBulletPluginSettings;
-	private readonly timeBulletPattern = '-[t]';
 	private readonly invalidFormatFallbackText = 'invalid_format';
 	private readonly timeBulletLinePattern = /^([-*+]) \[([^\]]+)\](.*)$/;
 	private readonly indentationPattern = /^(\s*)/;
 	private readonly bulletLinePattern = /^([-*+])(.*)$/;
-	private readonly registeredDocuments = new WeakSet<Document>();
 
 	private get timeStampFormat() {
 		// Use `||` to handle the case of an empty string.
@@ -48,12 +47,9 @@ export default class TimeBulletPlugin extends Plugin {
 	}
 
 	async onload() {
-		console.log('Time Bullet plugin loaded');
-
 		await this.loadSettings();
 		this.addSettingTab(new TimeBulletSettingTab(this.app, this));
 
-		// Add command for hotkey support
 		this.addCommand({
 			id: 'toggle-time-bullet',
 			name: 'Toggle time bullet',
@@ -62,141 +58,32 @@ export default class TimeBulletPlugin extends Plugin {
 			},
 		});
 
-		this.registerWorkspaceKeyHandlers();
-	}
-
-	private registerWorkspaceKeyHandlers() {
-		this.registerDocumentKeyHandler(document);
-
-		this.app.workspace.iterateAllLeaves((leaf) => {
-			this.registerDocumentKeyHandler(leaf.getContainer().doc);
-		});
-
-		this.registerEvent(
-			this.app.workspace.on('window-open', (workspaceWindow) => {
-				this.registerDocumentKeyHandler(workspaceWindow.doc);
-			}),
+		/**
+		 * Drive the Space/Enter timestamp triggers from CodeMirror document changes
+		 * rather than DOM `keydown` events. Virtual keyboards on iOS/Android do not
+		 * emit reliable `keydown` for Space/Enter, so reacting to the resulting text
+		 * change makes the plugin work on both desktop and mobile. The editor
+		 * extension is applied to every editor Obsidian creates, including popout
+		 * windows, so no per-document key wiring is needed.
+		 */
+		this.registerEditorExtension(
+			createTimeBulletFilter({
+				getFormat: () => this.timeStampFormat,
+				generateTimestamp: () => this.generateTimestamp(),
+				getIndentUnit: () => this.indentUnit,
+			})
 		);
 	}
 
-	private registerDocumentKeyHandler(doc: Document) {
-		if (this.registeredDocuments.has(doc)) {
-			return;
+	/** One indent level, honoring the vault's "Use tabs" / "Tab size" settings. */
+	private get indentUnit(): string {
+		const getConfig = (this.app.vault as unknown as { getConfig?: (key: string) => unknown }).getConfig;
+		const useTab = getConfig?.call(this.app.vault, 'useTab');
+		const tabSize = getConfig?.call(this.app.vault, 'tabSize');
+		if (useTab === false) {
+			return ' '.repeat(typeof tabSize === 'number' && tabSize > 0 ? tabSize : 4);
 		}
-
-		this.registeredDocuments.add(doc);
-		this.registerDomEvent(doc, 'keydown', (event: KeyboardEvent) => {
-			this.handleKeydown(event, doc);
-		});
-	}
-
-	private handleKeydown(event: KeyboardEvent, doc: Document) {
-		const editor = this.getFocusedMarkdownEditor(doc);
-		if (!editor) {
-			return;
-		}
-
-		if (event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey) {
-			this.handleEnterInEditor(editor, event);
-		}
-
-		if (event.key === ' ') {
-			this.handleSpaceInEditor(editor, event);
-		}
-	}
-
-	private getFocusedMarkdownEditor(doc: Document): Editor | null {
-		let focusedEditor: Editor | null = null;
-
-		this.app.workspace.iterateAllLeaves((leaf) => {
-			if (focusedEditor || !(leaf.view instanceof MarkdownView)) {
-				return;
-			}
-
-			if (leaf.getContainer().doc !== doc) {
-				return;
-			}
-
-			const editor = leaf.view.editor;
-			if (editor.hasFocus()) {
-				focusedEditor = editor;
-			}
-		});
-
-		return focusedEditor ?? this.app.workspace.getActiveViewOfType(MarkdownView)?.editor ?? null;
-	}
-
-	private handleSpaceInEditor(editor: Editor, event: KeyboardEvent) {
-		const cursor = editor.getCursor();
-		const currentLine = cursor.line;
-		const currentLineContent = editor.getLine(currentLine);
-
-		if (currentLineContent.startsWith(this.timeBulletPattern)) {
-			const timeStampPrefix = `- [${this.generateTimestamp()}] `;
-			const updatedLineContent = `${timeStampPrefix}${currentLineContent.slice(this.timeBulletPattern.length)}`;
-			editor.setLine(currentLine, updatedLineContent);
-
-			editor.setCursor({
-				line: currentLine,
-				ch: timeStampPrefix.length,
-			});
-
-			event.preventDefault();
-		}
-	}
-
-	private handleEnterInEditor(editor: Editor, event: KeyboardEvent) {
-		const cursor = editor.getCursor();
-		const currentLine = cursor.line;
-		const currentCursorCh = cursor.ch;
-
-		// Only proceed if we're not at the very first line
-		if (currentLine > 0) {
-			const previousLine = editor.getLine(currentLine - 1);
-
-			if (this.doesLineStartWithTimeBullet(previousLine)) {
-				const currentLineContent = editor.getLine(currentLine);
-				const indentation = this.getIndentation(currentLineContent);
-				const currentBullet = this.getBulletMatch(currentLineContent);
-
-				if (!currentBullet) {
-					return;
-				}
-
-				const currentLineWithoutIndentation = currentLineContent.slice(indentation.length);
-				const currentTimestamp = this.generateTimestamp();
-				const trimmedRestOfLine = currentBullet.restOfLine.trimStart();
-				const oldPrefixLength = currentLineWithoutIndentation.length - trimmedRestOfLine.length;
-				const newPrefixLength = `${currentBullet.marker} [${currentTimestamp}] `.length;
-				const updatedLineContent = this.buildTimeBulletLine(
-					indentation,
-					currentBullet.marker,
-					currentTimestamp,
-					currentBullet.restOfLine,
-				);
-
-				editor.setLine(currentLine, updatedLineContent);
-
-				const updatedCursorCh = this.calculateUpdatedCursorPosition(
-					currentCursorCh,
-					indentation.length,
-					oldPrefixLength,
-					newPrefixLength,
-					updatedLineContent.length,
-				);
-				editor.setCursor({
-					line: currentLine,
-					ch: updatedCursorCh,
-				});
-
-				// Prevent default Enter behavior to avoid creating an additional empty line
-				event.preventDefault();
-			}
-		}
-	}
-
-	private doesLineStartWithTimeBullet(line: string) {
-		return this.getValidTimeBulletMatch(line) !== null;
+		return '\t';
 	}
 
 	private generateTimestamp(): string {
